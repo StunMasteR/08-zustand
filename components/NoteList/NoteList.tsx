@@ -1,56 +1,66 @@
-import css from './NoteList.module.css';
-import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { deleteNote } from '@/lib/api';
-import type { Note } from '@/types/note';
-import Link from 'next/link';
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { deleteNote } from "../../lib/api";
+import type { Note } from "../../types/note";
+import Link from "next/link";
+import css from "./NoteList.module.css";
+import LoadingIndicator from "../LoadingIndicator/LoadingIndicator";
+import ErrorMessage from "../ErrorMessage/ErrorMessage";
+import EmptyState from "../EmptyState/EmptyState";
 
 interface NoteListProps {
   notes: Note[];
+  isLoading?: boolean;
+  isError?: boolean;
+  onViewNote?: (noteId: string) => void;
 }
 
-export default function NoteList({ notes }: NoteListProps) {
+const NoteList: React.FC<NoteListProps> = ({ notes, isLoading, isError, onViewNote }) => {
   const queryClient = useQueryClient();
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const mutation = useMutation({
+  const deleteMutation = useMutation({
     mutationFn: deleteNote,
-    onMutate: (noteId: string) => {
-      setDeletingId(noteId);
-    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-    },
-    onSettled: () => {
-      setDeletingId(null);
+      queryClient.invalidateQueries({ queryKey: ["notes"] });
     },
   });
 
-  if (!notes || notes.length === 0) {
-    return null;
-  }
+  if (isLoading) return <LoadingIndicator />;
+  if (isError) return <ErrorMessage />;
+  if (notes.length === 0) return <EmptyState message="Нотаток не знайдено" />;
 
   return (
     <ul className={css.list}>
       {notes.map(note => (
         <li className={css.listItem} key={note.id}>
-          <h2 className={css.title}>{note.title}</h2>
-          <p className={css.content}>{note.content}</p>
+          <Link href={`/notes/${note.id}`} className={css.noteLink}>
+            <h2 className={css.title}>{note.title}</h2>
+            <p className={css.content}>{note.content}</p>
+          </Link>
           <div className={css.footer}>
             <span className={css.tag}>{note.tag}</span>
-            <Link href={`/notes/${note.id}`} className={css.detailsLink}>View details</Link>
+            {onViewNote ? (
+              <button 
+                className={css.viewButton}
+                onClick={() => onViewNote(note.id)}
+              >
+                View details
+              </button>
+            ) : (
+              <Link href={`/notes/${note.id}`} className={css.viewButton}>
+                View details
+              </Link>
+            )}
             <button
               className={css.button}
-              onClick={() => mutation.mutate(note.id)}
-              disabled={mutation.isPending && deletingId === note.id}
+              onClick={() => deleteMutation.mutate(note.id)}
+              disabled={deleteMutation.status === 'pending'}
             >
-              {mutation.isPending && deletingId === note.id
-                ? 'Deleting...'
-                : 'Delete'}
+              Delete
             </button>
           </div>
         </li>
       ))}
     </ul>
   );
-}
+};
+
+export default NoteList;

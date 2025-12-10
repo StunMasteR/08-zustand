@@ -1,86 +1,80 @@
-'use client';
+"use client";
 
-import css from './Notes.module.css';
-import { useState } from 'react';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useDebouncedCallback } from 'use-debounce';
-import { fetchNotes } from '@/lib/api';
-import SearchBox from '@/components/SearchBox/SearchBox';
-import Pagination from '@/components/Pagination/Pagination';
-import NoResult from '@/components/NoResult/NoResult';
-import Modal from '@/components/Modal/Modal';
-import NoteForm from '@/components/NoteForm/NoteForm';
-import NoteList from '@/components/NoteList/NoteList';
-import { NoteTag } from '@/types/note';
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchNotes, FetchNotesResponse } from "../../../../lib/api";
+import NoteList from "../../../../components/NoteList/NoteList";
+import SearchBox from "../../../../components/SearchBox/SearchBox";
+import Pagination from "../../../../components/Pagination/Pagination";
+import styles from "./NotesPage.module.css";
+import Link from "next/link";
 
-interface Props {
-  tag?: NoteTag;
+interface NotesClientProps {
+  tag: string;
+  initialData: FetchNotesResponse;
 }
 
-export default function Notes({ tag }: Props) {
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [modalOpen, setModalOpen] = useState(false);
-  const perPage = 12;
+export default function NotesClient({ tag, initialData }: NotesClientProps) {
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  const queryClient = useQueryClient();
-
-  const debouncedSearch = useDebouncedCallback((value: string) => {
-    setSearchQuery(value);
-    setCurrentPage(1);
-  }, 500);
-
-  const { data, isLoading, isError, isFetching, isSuccess } = useQuery({
-    queryKey: ['notes', searchQuery, currentPage, tag],
-    queryFn: () =>
-      fetchNotes({ search: searchQuery, page: currentPage, perPage, tag }),
-    placeholderData: keepPreviousData,
-  });
-
-  const handleCreateNote = () => {
-    setCurrentPage(1);
-    queryClient.invalidateQueries({
-      queryKey: ['notes'],
-    });
+  // Скидаємо сторінку одразу при зміні пошуку
+  const handleSearch = (value: string) => {
+    setSearch(value);
+    setPage(1); // Скидаємо на першу сторінку одразу
   };
 
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["notes", page, debouncedSearch, tag],
+    queryFn: () => fetchNotes(page, 12, debouncedSearch, tag === "All" ? undefined : tag),
+    retry: 3,
+    retryDelay: 1000,
+    initialData:
+      page === 1 && debouncedSearch === "" && (tag === "All" || tag === undefined)
+        ? initialData
+        : undefined,
+    placeholderData: (previousData) => previousData,
+  });
+
   return (
-    <div className={css.app}>
-      <div className={css.toolbar}>
-        <SearchBox
-          textInput={searchInput}
-          onSearch={value => {
-            setSearchInput(value);
-            debouncedSearch(value);
-          }}
+    <div className={styles.container}>
+      <header className={styles.header}>
+        <SearchBox value={search} onChange={handleSearch} />
+        <Pagination
+          page={page}
+          setPage={setPage}
+          pageCount={data?.totalPages || 1}
         />
-        {isSuccess && data.totalPages > 1 && (
-          <Pagination
-            currentPage={currentPage}
-            totalPages={data.totalPages}
-            onPageChange={setCurrentPage}
-          />
-        )}
-        <button
-          className={css.button}
-          onClick={() => setModalOpen(true)}
-          disabled={isLoading || isFetching}
-        >
+        <Link href="/notes/action/create" className={styles.createButton}>
           Create note +
-        </button>
-      </div>
-      {isError && <div className={css.error}>Помилка при завантаженні нотаток</div>}
-      {!isLoading && !isError && data?.notes.length === 0 && <NoResult />}
-      {isSuccess && data?.notes?.length > 0 && <NoteList notes={data.notes} />}
-      {modalOpen && (
-        <Modal onClose={() => setModalOpen(false)}>
-          <NoteForm
-            onSuccess={handleCreateNote}
-            onCancel={() => setModalOpen(false)}
-          />
-        </Modal>
+        </Link>
+      </header>
+
+      {isLoading && (
+        <div className={styles.loading}>
+          <p>Завантаження нотаток...</p>
+        </div>
+      )}
+
+      {isError && (
+        <div className={styles.error}>
+          <p>Помилка завантаження нотаток. Спробуйте ще раз.</p>
+        </div>
+      )}
+
+      {!isLoading && !isError && data && (
+        <NoteList notes={data.notes || []} />
       )}
     </div>
   );
-}
+} 
