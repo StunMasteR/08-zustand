@@ -9,15 +9,17 @@ import Pagination from "../../../../components/Pagination/Pagination";
 import styles from "./NotesPage.module.css";
 import Link from "next/link";
 
+
 interface NotesClientProps {
   tag: string;
-  initialData: FetchNotesResponse;
+  initialPage: number;
+  initialSearch: string;
 }
 
-export default function NotesClient({ tag, initialData }: NotesClientProps) {
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+export default function NotesClient({ tag, initialPage, initialSearch }: NotesClientProps) {
+  const [page, setPage] = useState(initialPage);
+  const [search, setSearch] = useState(initialSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
 
   // Скидаємо сторінку одразу при зміні пошуку
   const handleSearch = (value: string) => {
@@ -39,10 +41,6 @@ export default function NotesClient({ tag, initialData }: NotesClientProps) {
     queryFn: () => fetchNotes(page, 12, debouncedSearch, tag === "All" ? undefined : tag),
     retry: 3,
     retryDelay: 1000,
-    initialData:
-      page === 1 && debouncedSearch === "" && (tag === "All" || tag === undefined)
-        ? initialData
-        : undefined,
     placeholderData: (previousData) => previousData,
   });
 
